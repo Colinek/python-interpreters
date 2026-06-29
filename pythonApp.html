@@ -46,11 +46,10 @@ cowsay.cow('Modules are working in the browser!')
 
         async function main() {
             try {
-                pyodide = await loadPyodide({
-                    // RIGHT HERE: Tell Pyodide exactly where to fetch its system files from!
-                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/",
-                    stdout: (text) => { consoleOutput.innerHTML += text + "\n"; }
-                });
+               pyodide = await loadPyodide({
+               indexURL: "https://unpkg.com/pyodide@0.25.0/full/",
+               stdout: (text) => { consoleOutput.innerHTML += text + "\n"; }
+               });
                 
                 // Write our mock guizero module into the virtual Python environment
                 pyodide.FS.writeFile("guizero.py", fakeGuizeroCode);
