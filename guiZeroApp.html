@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Guizero Simulator</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <style>
+        :root {
+            --page-bg: linear-gradient(180deg, #f4f7fb 0%, #e8eff8 100%);
+            --panel-bg: rgba(255, 255, 255, 0.92);
+            --panel-border: rgba(11, 70, 117, 0.16);
+            --accent: #0b5f8a;
+            --accent-dark: #094765;
+            --console-bg: #17202a;
+            --console-fg: #d8f8dd;
+            --console-error: #ff9d9d;
+            --shadow: 0 18px 40px rgba(18, 44, 72, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 24px;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--page-bg);
+            color: #1b2733;
+        }
+
+        .page {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        #header {
+            margin-bottom: 20px;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: clamp(1.8rem, 2.6vw, 2.8rem);
+        }
+
+        #header p {
+            margin: 8px 0 0;
+            color: #516273;
+        }
+
+        #main-container {
+            display: grid;
+            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(8px);
+        }
+
+        #editor-panel,
+        #output-panel {
+            min-height: 720px;
+            display: flex;
+            flex-direction: column;
+            padding: 18px;
+        }
+
+        .panel-title {
+            margin: 0 0 12px;
+            font-size: 1rem;
+            color: #223547;
+        }
+
+        #code-input {
+            flex: 1;
+            width: 100%;
+            min-height: 420px;
+            resize: vertical;
+            border: 1px solid rgba(18, 67, 104, 0.15);
+            border-radius: 14px;
+            padding: 16px;
+            font: 14px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            background: #fbfdff;
+            color: #14202c;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        button {
+            border: none;
+            border-radius: 999px;
+            background: var(--accent);
+            color: white;
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 140ms ease, transform 140ms ease;
+        }
+
+        button:hover:enabled {
+            background: var(--accent-dark);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: #a4b0bb;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #output-panel {
+            gap: 12px;
+        }
+
+        #gui-canvas {
+            flex: 1 1 auto;
+            min-height: 420px;
+            background:
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), rgba(238, 245, 252, 0.88)),
+                linear-gradient(145deg, rgba(15, 99, 143, 0.08), rgba(15, 99, 143, 0));
+            border: 2px dashed rgba(11, 95, 138, 0.45);
+            border-radius: 18px;
+            padding: 14px;
+            position: relative;
+            overflow: auto;
+        }
+
+        #gui-canvas[data-empty="true"]::before {
+            content: "GUI will render here";
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            color: rgba(37, 65, 91, 0.45);
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        #console-output {
+            flex: 0 0 220px;
+            margin: 0;
+            padding: 14px;
+            border-radius: 16px;
+            background: var(--console-bg);
+            color: var(--console-fg);
+            font: 13px/1.45 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        #console-output .error {
+            color: var(--console-error);
+        }
+
+        #support-note {
+            margin: 0;
+            font-size: 0.92rem;
+            color: #506273;
+        }
+
+        @media (max-width: 980px) {
+            body {
+                padding: 16px;
+            }
+
+            #main-container {
+                grid-template-columns: 1fr;
+            }
+
+            #editor-panel,
+            #output-panel {
+                min-height: 620px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div id="header">
+            <h1>Web Guizero Simulator</h1>
+            <p id="status">Status: Loading Python engine...</p>
+        </div>
+
+        <div id="main-container">
+            <div id="editor-panel" class="panel">
+                <h2 class="panel-title">Python Code</h2>
+                <textarea id="code-input">from guizero import App, Box, Text, TextBox, PushButton, CheckBox, Slider
+
+app = App(title="My Web App", width=560, height=460, bg="#eef5ff")
+
+header = Box(app)
+message = Text(header, text="Welcome to guizero-lite", size=22, color="#0b5f8a", font="Georgia")
+name = TextBox(app, text="Type here", width=24)
+agree = CheckBox(app, text="Enable the red text")
+slider = Slider(app, start=12, end=36)
+
+def update_message():
+    message.value = f"Hello, {name.value or 'friend'}"
+    message.size = slider.value
+    message.color = "#c43c3c" if agree.value else "#0b5f8a"
+    print("Button clicked")
+
+button = PushButton(app, text="Update", command=update_message)
+
+app.display()</textarea>
+                <div class="controls">
+                    <button id="run-btn" disabled>Run Program</button>
+                    <button id="reset-btn" disabled>Reset View</button>
+                </div>
+            </div>
+
+            <div id="output-panel" class="panel">
+                <h2 class="panel-title">GUI View</h2>
+                <div id="gui-canvas" data-empty="true"></div>
+
+                <h2 class="panel-title">Console View</h2>
+                <pre id="console-output"></pre>
+                <p id="support-note">Supported widgets include App, Window, Box, TitleBox, Text, TextBox, PushButton, CheckBox, Combo, ListBox, Slider, ButtonGroup, Picture and Waffle.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const guiCanvas = document.getElementById("gui-canvas");
+        const consoleOutput = document.getElementById("console-output");
+        const codeInput = document.getElementById("code-input");
+        const runBtn = document.getElementById("run-btn");
+        const resetBtn = document.getElementById("reset-btn");
+        const statusText = document.getElementById("status");
+
+        let pyodide;
+        let isRunning = false;
+
+        function setCanvasEmpty(isEmpty) {
+            guiCanvas.dataset.empty = isEmpty ? "true" : "false";
+        }
+
+        function clearConsole() {
+            consoleOutput.textContent = "";
+        }
+
+        function appendConsole(text, type = "log") {
+            const line = document.createElement("span");
+            if (type === "error") {
+                line.className = "error";
+            }
+            line.textContent = `${text}\n`;
+            consoleOutput.appendChild(line);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        function resetViewOnly() {
+            guiCanvas.innerHTML = "";
+            setCanvasEmpty(true);
+            clearConsole();
+        }
+
+        const fakeGuizeroCode = `
+import inspect
+import js
+from pyodide.ffi import create_proxy
+
+_STATE = {
+    "widgets": [],
+    "timers": [],
+    "root": None,
+    "globals": None,
+}
+
+
+def _stringify(value):
+    return "" if value is None else str(value)
+
+
+def _as_bool(value):
+    return bool(value)
+
+
+def _style_size(value):
+    if value in (None, ""):
+        return ""
+    if isinstance(value, (int, float)):
+        return f"{value}px"
+    text = str(value)
+    if text.endswith(("px", "%", "rem", "em", "vh", "vw")):
+        return text
+    if text.isdigit():
+        return f"{text}px"
+    return text
+
+
+def _numeric_value(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def _normalize_args(args):
+    if args is None:
+        return ()
+    if isinstance(args, (list, tuple)):
+        return tuple(args)
+    return (args,)
+
+
+def _accepts_positional(command, count):
+    try:
+        signature = inspect.signature(command)
+    except (TypeError, ValueError):
+        return True
+
+    positional = 0
+    for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+            return True
+        if parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            positional += 1
+    return positional >= count
+
+
+def _invoke_command(command, args=None, optional_arg=None, include_optional=False):
+    if command is None:
+        return None
+    call_args = _normalize_args(args)
+    if include_optional and _accepts_positional(command, len(call_args) + 1):
+        call_args = call_args + (optional_arg,)
+    return command(*call_args)
+
+
+class EventData:
+    def __init__(self, widget, tk_event=None, key=None, x=None, y=None, display_x=None, display_y=None, width=None, height=None, keycode=None):
+        self.widget = widget
+        self.tk_event = tk_event
+        self.key = key
+        self.x = x
+        self.y = y
+        self.display_x = display_x
+        self.display_y = display_y
+        self.width = width
+        self.height = height
+        self.keycode = keycode
+
+
+def _build_event_data(widget, event):
+    x = getattr(event, "offsetX", None)
+    y = getattr(event, "offsetY", None)
+    display_x = getattr(event, "clientX", None)
+    display_y = getattr(event, "clientY", None)
+    key = getattr(event, "key", None)
+    keycode = getattr(event, "keyCode", None)
+    width = None
+    height = None
+    if getattr(widget, "_root", None) is not None:
+        rect = widget._root.getBoundingClientRect()
+        width = int(rect.width)
+        height = int(rect.height)
+    return EventData(
+        widget=widget,
+        tk_event=event,
+        key=key,
+        x=x,
+        y=y,
+        display_x=display_x,
+        display_y=display_y,
+        width=width,
+        height=height,
+        keycode=keycode,
+    )
+
+
+def _schedule_timer(owner, interval, command, args=None, repeating=False):
+    proxy = create_proxy(lambda: _invoke_command(command, args=args))
+    timer_type = "interval" if repeating else "timeout"
+    timer_id = js.setInterval(proxy, int(interval)) if repeating else js.setTimeout(proxy, int(interval))
+    timer = {
+        "id": timer_id,
+        "proxy": proxy,
+        "type": timer_type,
+        "command": command,
+        "owner": owner,
+    }
+    _STATE["timers"].append(timer)
+    return timer_id
+
+
+def _clear_timer(timer):
+    timer_id = timer["id"]
+    proxy = timer["proxy"]
+    timer_type = timer["type"]
+    try:
+        if timer_type == "interval":
+            js.clearInterval(timer_id)
+        else:
+            js.clearTimeout(timer_id)
+    except Exception:
+        pass
+    try:
+        proxy.destroy()
+    except Exception:
+        pass
+
+
+class _BaseComponent:
+    def __init__(self, master=None):
+        self.master = master
+        self.children = []
+        self._proxies = []
+        self._handler_proxies = {}
+        self._destroyed = False
+        self._root = None
+        self._enabled_targets = []
+        self._default_enabled = True if master is None else master.enabled
+        _STATE["widgets"].append(self)
+        if master is not None and hasattr(master, "_register_child"):
+            master._register_child(self)
+
+    def _register_child(self, child):
+        self.children.append(child)
+
+    def _remember_proxy(self, proxy):
+        self._proxies.append(proxy)
+        return proxy
+
+    def _set_handler(self, key, target, attr, callback):
+        existing = self._handler_proxies.get(key)
+        if existing is not None:
+            try:
+                setattr(target, attr, None)
+            except Exception:
+                pass
+            try:
+                existing.destroy()
+            except Exception:
+                pass
+            self._handler_proxies.pop(key, None)
+        if callback is None:
+            return
+        proxy = create_proxy(callback)
+        setattr(target, attr, proxy)
+        self._handler_proxies[key] = proxy
+
+    def _bind(self, target, attr, command=None, pass_value=False, transform=None, args=None):
+        if command is None:
+            self._set_handler(attr, target, attr, None)
+            return
+
+        def _callback(event):
+            value = None
+            if pass_value:
+                value = getattr(self, "value", None)
+                if transform is not None:
+                    value = transform(value)
+                return _invoke_command(command, args=args, optional_arg=value, include_optional=True)
+            return _invoke_command(command, args=args)
+
+        self._set_handler(attr, target, attr, _callback)
+
+    def _bind_event_property(self, property_name, dom_attr, command):
+        target = getattr(self, "_event_target", None) or getattr(self, "_focus_target", None) or self._root
+        if target is None:
+            return
+
+        def _callback(event):
+            event_data = _build_event_data(self, event)
+            return _invoke_command(command, optional_arg=event_data, include_optional=True)
+
+        self._set_handler(property_name, target, dom_attr, _callback)
+
+    def _set_style(self, prop, value, target=None):
+        if not hasattr(self, "_root") or self._root is None:
+            return
+        node = target or self._root
+        setattr(node.style, prop, _stringify(value))
+
+    def _set_dimension(self, prop, value, target=None):
+        if value is None:
+            return
+        node = target or self._root
+        setattr(node.style, prop, _style_size(value))
+
+    def _append_to_master(self, master, node):
+        if master is None:
+            return
+        parent = getattr(master, "_container", None)
+        if parent is not None:
+            parent.appendChild(node)
+        if getattr(master, "_layout", "auto") == "grid" and getattr(self, "_grid", None):
+            x, y = self._grid
+            node.style.gridColumn = str(int(x) + 1)
+            node.style.gridRow = str(int(y) + 1)
+
+    def show(self):
+        if self._root is not None:
+            self._root.style.display = self._display_style or ""
+
+    def hide(self):
+        if self._root is not None:
+            self._root.style.display = "none"
+
+    def focus(self):
+        if hasattr(self, "_focus_target") and self._focus_target is not None:
+            self._focus_target.focus()
+
+    def enable(self):
+        self.enabled = True
+
+    def disable(self):
+        self.enabled = False
+
+    def resize(self, width, height):
+        self.width = width
+        self.height = height
+
+    def after(self, time, command, args=None):
+        return _schedule_timer(self, time, command, args=args, repeating=False)
+
+    def repeat(self, time, command, args=None):
+        return _schedule_timer(self, time, command, args=args, repeating=True)
+
+    def cancel(self, command_or_id):
+        for timer in list(_STATE["timers"]):
+            if timer["owner"] is self and (timer["command"] == command_or_id or timer["id"] == command_or_id):
+                _clear_timer(timer)
+                _STATE["timers"].remove(timer)
+
+    @property
+    def visible(self):
+        return self._root is not None and self._root.style.display != "none"
+
+    @visible.setter
+    def visible(self, value):
+        if _as_bool(value):
+            self.show()
+        else:
+            self.hide()
+
+    @property
+    def enabled(self):
+        if not self._enabled_targets:
+            return True
+        return not bool(self._enabled_targets[0].disabled)
+
+    @enabled.setter
+    def enabled(self, value):
+        if value is None:
+            value = self._default_enabled
+        disabled = not _as_bool(value)
+        for target in self._enabled_targets:
+            target.disabled = disabled
+
+    @property
+    def bg(self):
+        return self._root.style.backgroundColor if self._root is not None else ""
+
+    @bg.setter
+    def bg(self, value):
+        self._set_style("backgroundColor", value)
+
+    @property
+    def width(self):
+        return self._root.style.width if self._root is not None else ""
+
+    @width.setter
+    def width(self, value):
+        self._set_dimension("width", value)
+
+    @property
+    def height(self):
+        return self._root.style.height if self._root is not None else ""
+
+    @height.setter
+    def height(self, value):
+        self._set_dimension("height", value)
+
+    @property
+    def when_clicked(self):
+        return getattr(self, "_when_clicked", None)
+
+    @when_clicked.setter
+    def when_clicked(self, command):
+        self._when_clicked = command
+        self._bind_event_property("when_clicked", "onclick", command)
+
+    @property
+    def when_double_clicked(self):
+        return getattr(self, "_when_double_clicked", None)
+
+    @when_double_clicked.setter
+    def when_double_clicked(self, command):
+        self._when_double_clicked = command
+        self._bind_event_property("when_double_clicked", "ondblclick", command)
+
+    @property
+    def when_mouse_enters(self):
+        return getattr(self, "_when_mouse_enters", None)
+
+    @when_mouse_enters.setter
+    def when_mouse_enters(self, command):
+        self._when_mouse_enters = command
+        self._bind_event_property("when_mouse_enters", "onmouseenter", command)
+
+    @property
+    def when_mouse_leaves(self):
+        return getattr(self, "_when_mouse_leaves", None)
+
+    @when_mouse_leaves.setter
+    def when_mouse_leaves(self, command):
+        self._when_mouse_leaves = command
+        self._bind_event_property("when_mouse_leaves", "onmouseleave", command)
+
+    def destroy(self):
+        if self._destroyed:
+            return
+        self._destroyed = True
+        for timer in list(_STATE["timers"]):
+            if timer["owner"] is self:
+                _clear_timer(timer)
+                _STATE["timers"].remove(timer)
+        for child in list(self.children):
+            try:
+                child.destroy()
+            except Exception:
+                pass
+        self.children.clear()
+        for proxy in self._proxies:
+            try:
+                proxy.destroy()
+            except Exception:
+                pass
+        self._proxies.clear()
+        for proxy in self._handler_proxies.values():
+            try:
+                proxy.destroy()
+            except Exception:
+                pass
+        self._handler_proxies.clear()
+        if self._root is not None and self._root.parentNode:
+            self._root.remove()
+        if self in _STATE["widgets"]:
+            _STATE["widgets"].remove(self)
+
+
+class _ContainerBase(_BaseComponent):
+    def __init__(self, master=None, layout="auto", width=None, height=None, border=False, bg=None, visible=True, align=None, grid=None):
+        self._layout = layout or "auto"
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("div")
+        self._container = self._root
+        self._display_style = "grid" if self._layout == "grid" else "flex"
+        self._root.style.display = self._display_style
+        if self._layout == "grid":
+            self._root.style.gridAutoFlow = "row"
+            self._root.style.gridAutoRows = "minmax(24px, auto)"
+            self._root.style.gap = "8px"
+            self._root.style.alignItems = "start"
+            self._root.style.justifyItems = "start"
+        else:
+            self._root.style.flexDirection = "column"
+            self._root.style.alignItems = "stretch"
+            self._root.style.gap = "8px"
+        self._root.style.boxSizing = "border-box"
+        self._root.style.position = "relative"
+        self._root.style.margin = "4px"
+        self._root.style.padding = "6px"
+        self._root.style.minWidth = "0"
+        if border:
+            self._root.style.border = "1px solid #6b7d8f"
+            self._root.style.borderRadius = "10px"
+        if bg is not None:
+            self.bg = bg
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
+        self._apply_alignment()
+        self._append_to_master(master, self._root)
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.master is None or self.align is None or self._root is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    def clear(self):
+        for child in list(self.children):
+            child.destroy()
+
+
+class App(_ContainerBase):
+    def __init__(self, title="guizero", width=500, height=420, bg=None, layout="auto"):
+        canvas = js.document.getElementById("gui-canvas")
+        canvas.innerHTML = ""
+        canvas.setAttribute("data-empty", "false")
+        canvas.style.position = "relative"
+        canvas.style.overflow = "auto"
+
+        self._layout = layout or "auto"
+        self.children = []
+        self._proxies = []
+        self._handler_proxies = {}
+        self._destroyed = False
+        self.master = None
+        self.title = title
+        self._enabled_targets = []
+        self._default_enabled = True
+        self._root = js.document.createElement("section")
+        self._root.style.position = "relative"
+        self._root.style.display = "flex"
+        self._root.style.flexDirection = "column"
+        self._root.style.boxSizing = "border-box"
+        self._root.style.width = _style_size(width)
+        self._root.style.minHeight = _style_size(height)
+        self._root.style.maxWidth = "100%"
+        self._root.style.border = "1px solid rgba(22, 67, 99, 0.22)"
+        self._root.style.borderRadius = "14px"
+        self._root.style.boxShadow = "0 10px 30px rgba(22, 53, 87, 0.12)"
+        self._root.style.backgroundColor = bg or "white"
+        self._root.style.overflow = "hidden"
+
+        self._title_bar = js.document.createElement("div")
+        self._title_bar.style.display = "flex"
+        self._title_bar.style.alignItems = "center"
+        self._title_bar.style.justifyContent = "space-between"
+        self._title_bar.style.gap = "10px"
+        self._title_bar.style.padding = "10px 14px"
+        self._title_bar.style.background = "linear-gradient(180deg, #f2f6fb, #dde8f5)"
+        self._title_bar.style.borderBottom = "1px solid rgba(22, 67, 99, 0.15)"
+
+        self._title_text = js.document.createElement("span")
+        self._title_text.style.fontWeight = "600"
+        self._title_text.style.color = "#223547"
+        self._title_text.textContent = _stringify(title)
+        self._title_bar.appendChild(self._title_text)
+
+        close_btn = js.document.createElement("button")
+        close_btn.textContent = "Close"
+        close_btn.style.padding = "6px 10px"
+        close_btn.style.fontSize = "12px"
+        close_btn.style.borderRadius = "999px"
+        close_btn.style.background = "#3b6d93"
+        close_btn.style.color = "white"
+        close_btn.style.border = "none"
+        close_btn.style.cursor = "pointer"
+        close_proxy = create_proxy(lambda event: self._request_close())
+        close_btn.onclick = close_proxy
+        self._remember_proxy(close_proxy)
+        self._title_bar.appendChild(close_btn)
+
+        self._container = js.document.createElement("div")
+        self._container.style.display = "grid" if self._layout == "grid" else "flex"
+        if self._layout == "grid":
+            self._container.style.gridAutoFlow = "row"
+            self._container.style.gridAutoRows = "minmax(24px, auto)"
+            self._container.style.gap = "8px"
+            self._container.style.alignItems = "start"
+            self._container.style.justifyItems = "start"
+        else:
+            self._container.style.flexDirection = "column"
+            self._container.style.alignItems = "stretch"
+            self._container.style.gap = "8px"
+        self._container.style.padding = "12px"
+        self._container.style.minHeight = "140px"
+        self._container.style.boxSizing = "border-box"
+
+        self._root.appendChild(self._title_bar)
+        self._root.appendChild(self._container)
+        canvas.appendChild(self._root)
+
+        self._display_style = "flex"
+        self._focus_target = self._container
+        self._event_target = self._root
+        self._when_closed = None
+        _STATE["widgets"].append(self)
+        _STATE["root"] = self
+
+    def display(self):
+        return self
+
+    def clear(self):
+        for child in list(self.children):
+            child.destroy()
+
+    def repeat(self, interval, command, args=None):
+        return _schedule_timer(self, interval, command, args=args, repeating=True)
+
+    def after(self, delay, command, args=None):
+        return _schedule_timer(self, delay, command, args=args, repeating=False)
+
+    def cancel(self, command_or_id):
+        for timer in list(_STATE["timers"]):
+            if timer["owner"] is self and (timer["command"] == command_or_id or timer["id"] == command_or_id):
+                _clear_timer(timer)
+                _STATE["timers"].remove(timer)
+                break
+
+    def info(self, title, text):
+        js.alert(f"{title}\\n\\n{text}")
+
+    def warn(self, title, text):
+        js.alert(f"Warning: {title}\\n\\n{text}")
+
+    def error(self, title, text):
+        js.alert(f"Error: {title}\\n\\n{text}")
+
+    def yesno(self, title, text):
+        return bool(js.confirm(f"{title}\\n\\n{text}"))
+
+    def question(self, title, text, default=""):
+        return js.prompt(f"{title}\\n\\n{text}", default)
+
+    @property
+    def bg(self):
+        return self._root.style.backgroundColor
+
+    @bg.setter
+    def bg(self, value):
+        self._root.style.backgroundColor = _stringify(value)
+
+    @property
+    def title(self):
+        return self._title_text.textContent if hasattr(self, "_title_text") else ""
+
+    @title.setter
+    def title(self, value):
+        if hasattr(self, "_title_text"):
+            self._title_text.textContent = _stringify(value)
+
+    @property
+    def text_color(self):
+        return self._container.style.color
+
+    @text_color.setter
+    def text_color(self, value):
+        color = _stringify(value)
+        self._container.style.color = color
+        if hasattr(self, "_title_text"):
+            self._title_text.style.color = color
+
+    @property
+    def when_closed(self):
+        return self._when_closed
+
+    @when_closed.setter
+    def when_closed(self, command):
+        self._when_closed = command
+
+    def _request_close(self):
+        if self._when_closed is not None:
+            return _invoke_command(self._when_closed)
+        self.destroy()
+
+
+class Box(_ContainerBase):
+    pass
+
+
+class TitleBox(_ContainerBase):
+    def __init__(self, master, text="", layout="auto", width=None, height=None, border=True, bg=None, visible=True, align=None, grid=None):
+        self._layout = layout or "auto"
+        self._grid = grid
+        self.align = align
+        _BaseComponent.__init__(self, master=master)
+        self._root = js.document.createElement("fieldset")
+        self._root.style.border = "1px solid #8aa0b5"
+        self._root.style.borderRadius = "12px"
+        self._root.style.padding = "10px"
+        self._root.style.margin = "4px"
+        self._root.style.boxSizing = "border-box"
+        self._root.style.minWidth = "0"
+
+        self._legend = js.document.createElement("legend")
+        self._legend.textContent = _stringify(text)
+        self._legend.style.padding = "0 6px"
+        self._legend.style.color = "#36506a"
+        self._root.appendChild(self._legend)
+
+        self._container = js.document.createElement("div")
+        self._container.style.display = "grid" if self._layout == "grid" else "flex"
+        if self._layout == "grid":
+            self._container.style.gridAutoFlow = "row"
+            self._container.style.gridAutoRows = "minmax(24px, auto)"
+            self._container.style.gap = "8px"
+            self._container.style.alignItems = "start"
+            self._container.style.justifyItems = "start"
+        else:
+            self._container.style.flexDirection = "column"
+            self._container.style.gap = "8px"
+        self._root.appendChild(self._container)
+        self._display_style = "block"
+        if bg is not None:
+            self.bg = bg
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
+        self._apply_alignment()
+        self._append_to_master(master, self._root)
+        if not visible:
+            self.hide()
+
+    @property
+    def text(self):
+        return self._legend.textContent
+
+    @text.setter
+    def text(self, value):
+        self._legend.textContent = _stringify(value)
+
+    def clear(self):
+        for child in list(self.children):
+            child.destroy()
+
+
+class Window(App):
+    def __init__(self, master, title="guizero", width=360, height=260, bg=None, layout="auto"):
+        self.master = master
+        self.children = []
+        self._proxies = []
+        self._handler_proxies = {}
+        self._destroyed = False
+        self._enabled_targets = []
+        self._layout = layout or "auto"
+        self._grid = None
+        self._default_enabled = master.enabled if master is not None else True
+        self._when_closed = None
+
+        self._root = js.document.createElement("section")
+        self._root.style.position = "absolute"
+        self._root.style.top = "18px"
+        self._root.style.left = "18px"
+        self._root.style.zIndex = "50"
+        self._root.style.display = "none"
+        self._root.style.flexDirection = "column"
+        self._root.style.boxSizing = "border-box"
+        self._root.style.width = _style_size(width)
+        self._root.style.minHeight = _style_size(height)
+        self._root.style.maxWidth = "calc(100% - 36px)"
+        self._root.style.border = "1px solid rgba(24, 62, 90, 0.32)"
+        self._root.style.borderRadius = "14px"
+        self._root.style.boxShadow = "0 20px 40px rgba(18, 43, 70, 0.24)"
+        self._root.style.backgroundColor = bg or "white"
+        self._root.style.overflow = "hidden"
+
+        title_wrap = js.document.createElement("div")
+        title_wrap.style.display = "flex"
+        title_wrap.style.alignItems = "center"
+        title_wrap.style.justifyContent = "space-between"
+        title_wrap.style.padding = "10px 14px"
+        title_wrap.style.background = "linear-gradient(180deg, #f1f6fb, #dce7f4)"
+        title_wrap.style.borderBottom = "1px solid rgba(22, 67, 99, 0.15)"
+
+        self._title_text = js.document.createElement("span")
+        self._title_text.style.fontWeight = "600"
+        self._title_text.style.color = "#223547"
+        self._title_text.textContent = _stringify(title)
+        title_wrap.appendChild(self._title_text)
+
+        close_btn = js.document.createElement("button")
+        close_btn.textContent = "Close"
+        close_btn.style.padding = "6px 10px"
+        close_btn.style.fontSize = "12px"
+        close_btn.style.borderRadius = "999px"
+        close_btn.style.background = "#3b6d93"
+        close_btn.style.color = "white"
+        close_btn.style.border = "none"
+        close_btn.style.cursor = "pointer"
+        close_proxy = create_proxy(lambda event: self._request_close())
+        close_btn.onclick = close_proxy
+        self._remember_proxy(close_proxy)
+        title_wrap.appendChild(close_btn)
+
+        self._container = js.document.createElement("div")
+        self._container.style.display = "grid" if self._layout == "grid" else "flex"
+        if self._layout == "grid":
+            self._container.style.gridAutoFlow = "row"
+            self._container.style.gridAutoRows = "minmax(24px, auto)"
+            self._container.style.gap = "8px"
+            self._container.style.alignItems = "start"
+            self._container.style.justifyItems = "start"
+        else:
+            self._container.style.flexDirection = "column"
+            self._container.style.alignItems = "stretch"
+            self._container.style.gap = "8px"
+        self._container.style.padding = "12px"
+
+        self._root.appendChild(title_wrap)
+        self._root.appendChild(self._container)
+        getattr(master, "_container", master._root).appendChild(self._root)
+        self._display_style = "flex"
+        self._focus_target = self._container
+        self._event_target = self._root
+        _STATE["widgets"].append(self)
+        master._register_child(self)
+
+
+class Text(_BaseComponent):
+    def __init__(self, master, text="", size=None, color=None, font=None, bg=None, width=None, height=None, visible=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("div")
+        self._element = self._root
+        self._display_style = "block"
+        self._root.style.margin = "4px"
+        self._root.style.whiteSpace = "pre-wrap"
+        self._root.style.minWidth = "0"
+        self.value = text
+        if size is not None:
+            self.size = size
+        if color is not None:
+            self.color = color
+        if font is not None:
+            self.font = font
+        if bg is not None:
+            self.bg = bg
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
+        self._focus_target = self._root
+        self._event_target = self._root
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def value(self):
+        return self._root.textContent
+
+    @value.setter
+    def value(self, value):
+        self._root.textContent = _stringify(value)
+
+    @property
+    def color(self):
+        return self._root.style.color
+
+    @color.setter
+    def color(self, value):
+        self._root.style.color = _stringify(value)
+
+    @property
+    def text_color(self):
+        return self.color
+
+    @text_color.setter
+    def text_color(self, value):
+        self.color = value
+
+    @property
+    def size(self):
+        return self._root.style.fontSize
+
+    @size.setter
+    def size(self, value):
+        self._root.style.fontSize = f"{value}pt" if isinstance(value, (int, float)) else _stringify(value)
+
+    @property
+    def text_size(self):
+        return self.size
+
+    @text_size.setter
+    def text_size(self, value):
+        self.size = value
+
+    @property
+    def font(self):
+        return self._root.style.fontFamily
+
+    @font.setter
+    def font(self, value):
+        self._root.style.fontFamily = _stringify(value)
+
+    def clear(self):
+        self.value = ""
+
+    def append(self, value):
+        self.value = self.value + _stringify(value)
+
+
+class TextBox(_BaseComponent):
+    def __init__(self, master, text="", width=None, multiline=False, height=None, command=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("textarea" if multiline else "input")
+        self._element = self._root
+        if not multiline:
+            self._element.type = "text"
+        else:
+            self._element.rows = 4
+        self._display_style = "block"
+        self._root.style.margin = "4px"
+        self._root.style.padding = "8px 10px"
+        self._root.style.borderRadius = "10px"
+        self._root.style.border = "1px solid #b3c3d3"
+        self._root.style.font = "14px 'Segoe UI', sans-serif"
+        self._root.style.minWidth = "0"
+        self._enabled_targets = [self._element]
+        self._focus_target = self._element
+        self._event_target = self._element
+        self.value = text
+        if width is not None:
+            if multiline:
+                self._root.style.width = _style_size(width)
+            else:
+                self._root.style.width = f"{int(width) * 10}px" if isinstance(width, (int, float)) else _style_size(width)
+        if height is not None:
+            self.height = height
+        self._bind(self._element, "oninput", command, pass_value=True)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def value(self):
+        return self._element.value
+
+    @value.setter
+    def value(self, value):
+        self._element.value = _stringify(value)
+
+    @property
+    def text(self):
+        return self.value
+
+    @text.setter
+    def text(self, value):
+        self.value = value
+
+    @property
+    def font(self):
+        return self._root.style.fontFamily
+
+    @font.setter
+    def font(self, value):
+        self._root.style.fontFamily = _stringify(value)
+
+    @property
+    def color(self):
+        return self._root.style.color
+
+    @color.setter
+    def color(self, value):
+        self._root.style.color = _stringify(value)
+
+    @property
+    def text_color(self):
+        return self.color
+
+    @text_color.setter
+    def text_color(self, value):
+        self.color = value
+
+    def clear(self):
+        self.value = ""
+
+
+class PushButton(_BaseComponent):
+    def __init__(self, master, command=None, args=None, text="Button", width=None, height=None, image=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("button")
+        self._element = self._root
+        self._display_style = "inline-block"
+        self._root.style.margin = "4px"
+        self._root.style.padding = "8px 14px"
+        self._root.style.borderRadius = "999px"
+        self._root.style.border = "none"
+        self._root.style.background = "#0b5f8a"
+        self._root.style.color = "white"
+        self._root.style.cursor = "pointer"
+        self._root.style.fontWeight = "600"
+        self._enabled_targets = [self._element]
+        self._focus_target = self._element
+        self._event_target = self._element
+        self._text_node = js.document.createElement("span")
+        self._root.appendChild(self._text_node)
+        self.text = text
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
+        if image:
+            self.image = image
+        self._command = command
+        self._command_args = args
+        self._bind(self._element, "onclick", command, args=args)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def text(self):
+        return self._text_node.textContent
+
+    @text.setter
+    def text(self, value):
+        self._text_node.textContent = _stringify(value)
+
+    @property
+    def image(self):
+        return getattr(self, "_image_src", None)
+
+    @image.setter
+    def image(self, value):
+        self._image_src = _stringify(value)
+        if not hasattr(self, "_image_node"):
+            self._image_node = js.document.createElement("img")
+            self._image_node.style.display = "block"
+            self._image_node.style.maxWidth = "100%"
+            self._image_node.style.maxHeight = "100%"
+            self._image_node.style.margin = "0 auto"
+            self._root.insertBefore(self._image_node, self._text_node)
+        self._image_node.src = self._image_src
+
+    def update_command(self, command, args=None):
+        self._command = command
+        self._command_args = args
+        self._bind(self._element, "onclick", command, args=args)
+
+
+class CheckBox(_BaseComponent):
+    def __init__(self, master, text="Checkbox", command=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("label")
+        self._root.style.display = "flex"
+        self._root.style.alignItems = "center"
+        self._root.style.gap = "8px"
+        self._root.style.margin = "4px"
+        self._display_style = "flex"
+
+        self._element = js.document.createElement("input")
+        self._element.type = "checkbox"
+        self._label = js.document.createElement("span")
+        self._label.textContent = _stringify(text)
+        self._root.appendChild(self._element)
+        self._root.appendChild(self._label)
+        self._enabled_targets = [self._element]
+        self._focus_target = self._element
+        self._event_target = self._root
+        self._bind(self._element, "onchange", command)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def text(self):
+        return self._label.textContent
+
+    @text.setter
+    def text(self, value):
+        self._label.textContent = _stringify(value)
+
+    @property
+    def value(self):
+        return 1 if self._element.checked else 0
+
+    @value.setter
+    def value(self, value):
+        self._element.checked = _as_bool(value)
+
+
+class Combo(_BaseComponent):
+    def __init__(self, master, options, selected=None, command=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("select")
+        self._element = self._root
+        self._display_style = "block"
+        self._root.style.margin = "4px"
+        self._root.style.padding = "8px 10px"
+        self._root.style.borderRadius = "10px"
+        self._root.style.border = "1px solid #b3c3d3"
+        self._enabled_targets = [self._element]
+        self._focus_target = self._element
+        self._event_target = self._element
+        self.options = list(options)
+        if selected is not None:
+            self.value = selected
+        self._bind(self._element, "onchange", command, pass_value=True)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def options(self):
+        return [opt.value for opt in self._element.options]
+
+    @options.setter
+    def options(self, values):
+        self._element.innerHTML = ""
+        for item in values:
+            option = js.document.createElement("option")
+            option.value = _stringify(item)
+            option.textContent = _stringify(item)
+            self._element.appendChild(option)
+
+    @property
+    def value(self):
+        return self._element.value
+
+    @value.setter
+    def value(self, value):
+        self._element.value = _stringify(value)
+
+
+class ListBox(Combo):
+    def __init__(self, master, items, selected=None, command=None, multiselect=False, visible=True, enabled=True, align=None, grid=None):
+        self._multiselect = multiselect
+        super().__init__(master, items, selected=selected, command=command, visible=visible, enabled=enabled, align=align, grid=grid)
+        self._element.size = min(max(len(items), 2), 10)
+        self._element.multiple = bool(multiselect)
+
+    @property
+    def value(self):
+        if self._multiselect:
+            return [option.value for option in self._element.options if option.selected]
+        return self._element.value
+
+    @value.setter
+    def value(self, value):
+        if self._multiselect:
+            chosen = {_stringify(item) for item in (value if isinstance(value, (list, tuple, set)) else [value])}
+            for option in self._element.options:
+                option.selected = option.value in chosen
+            return
+        self._element.value = _stringify(value)
+
+
+class Slider(_BaseComponent):
+    def __init__(self, master, start=0, end=100, horizontal=True, command=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("input")
+        self._element = self._root
+        self._element.type = "range"
+        self._element.min = _stringify(start)
+        self._element.max = _stringify(end)
+        self._element.value = _stringify(start)
+        self._display_style = "block"
+        self._root.style.margin = "4px"
+        self._root.style.width = "220px"
+        if not horizontal:
+            self._root.style.writingMode = "vertical-lr"
+        self._enabled_targets = [self._element]
+        self._focus_target = self._element
+        self._event_target = self._element
+        self._bind(self._element, "oninput", command, pass_value=True, transform=_numeric_value)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def value(self):
+        return _numeric_value(self._element.value)
+
+    @value.setter
+    def value(self, value):
+        self._element.value = _stringify(value)
+
+
+class ButtonGroup(_BaseComponent):
+    def __init__(self, master, options, selected=None, command=None, visible=True, enabled=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("fieldset")
+        self._root.style.border = "1px solid #b3c3d3"
+        self._root.style.borderRadius = "12px"
+        self._root.style.margin = "4px"
+        self._root.style.padding = "8px 12px"
+        self._display_style = "block"
+        self._radios = []
+        self._enabled_targets = []
+        self._focus_target = None
+        self._event_target = self._root
+        group_name = f"group_{js.Math.random()}"
+
+        for item in options:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                label_text, value = item[0], item[1]
+            else:
+                label_text, value = item, item
+            label = js.document.createElement("label")
+            label.style.display = "flex"
+            label.style.alignItems = "center"
+            label.style.gap = "8px"
+            label.style.margin = "4px 0"
+
+            radio = js.document.createElement("input")
+            radio.type = "radio"
+            radio.name = group_name
+            radio.value = _stringify(value)
+            self._enabled_targets.append(radio)
+            if self._focus_target is None:
+                self._focus_target = radio
+
+            text = js.document.createElement("span")
+            text.textContent = _stringify(label_text)
+            label.appendChild(radio)
+            label.appendChild(text)
+            self._root.appendChild(label)
+            self._radios.append(radio)
+
+            if command is not None:
+                proxy = create_proxy(lambda event, self=self, command=command: command(self.value))
+                radio.onchange = proxy
+                self._remember_proxy(proxy)
+
+        if selected is not None:
+            self.value = selected
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        self.enabled = enabled
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def value(self):
+        for radio in self._radios:
+            if radio.checked:
+                return radio.value
+        return None
+
+    @value.setter
+    def value(self, value):
+        text = _stringify(value)
+        for radio in self._radios:
+            radio.checked = radio.value == text
+
+
+class Picture(_BaseComponent):
+    def __init__(self, master, image=None, width=None, height=None, visible=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._root = js.document.createElement("img")
+        self._element = self._root
+        self._display_style = "block"
+        self._root.style.margin = "4px"
+        self._root.style.maxWidth = "100%"
+        self._focus_target = self._root
+        self._event_target = self._root
+        if image is not None:
+            self.value = image
+        if width is not None:
+            self.width = width
+        if height is not None:
+            self.height = height
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    @property
+    def value(self):
+        return self._element.src
+
+    @value.setter
+    def value(self, value):
+        self._element.src = _stringify(value)
+
+    @property
+    def width(self):
+        return int(self._element.width or self._element.naturalWidth or 0)
+
+    @width.setter
+    def width(self, value):
+        number = _numeric_value(value)
+        self._element.width = int(number) if number not in ("", None) else 0
+        self._root.style.width = _style_size(value)
+
+    @property
+    def height(self):
+        return int(self._element.height or self._element.naturalHeight or 0)
+
+    @height.setter
+    def height(self, value):
+        number = _numeric_value(value)
+        self._element.height = int(number) if number not in ("", None) else 0
+        self._root.style.height = _style_size(value)
+
+
+class Waffle(_BaseComponent):
+    def __init__(self, master, width=8, height=8, pad=2, color="white", outline=True, command=None, visible=True, align=None, grid=None):
+        self._grid = grid
+        self.align = align
+        super().__init__(master=master)
+        self._width = int(width)
+        self._height = int(height)
+        self._default_color = _stringify(color)
+        self._command = command
+        self._cells = []
+        self._root = js.document.createElement("div")
+        self._root.style.display = "grid"
+        self._root.style.gridTemplateColumns = "repeat(" + str(self._width) + ", 22px)"
+        self._root.style.gridAutoRows = "22px"
+        self._root.style.gap = _style_size(pad)
+        self._root.style.margin = "4px"
+        self._display_style = "grid"
+        self._focus_target = self._root
+        self._event_target = self._root
+
+        border_style = "1px solid rgba(40, 70, 96, 0.35)" if outline else "none"
+        for y in range(self._height):
+            row = []
+            for x in range(self._width):
+                cell = js.document.createElement("button")
+                cell.style.width = "22px"
+                cell.style.height = "22px"
+                cell.style.padding = "0"
+                cell.style.borderRadius = "6px"
+                cell.style.border = border_style
+                cell.style.backgroundColor = self._default_color
+                cell.style.cursor = "pointer"
+                if command is not None:
+                    proxy = create_proxy(lambda event, x=x, y=y, command=command: command(x, y))
+                    cell.onclick = proxy
+                    self._remember_proxy(proxy)
+                self._root.appendChild(cell)
+                row.append(cell)
+            self._cells.append(row)
+        self._append_to_master(master, self._root)
+        self._apply_alignment()
+        if not visible:
+            self.hide()
+
+    def _apply_alignment(self):
+        if self.align is None:
+            return
+        alignment = str(self.align).lower()
+        if alignment in ("left", "top"):
+            self._root.style.alignSelf = "flex-start"
+        elif alignment in ("right", "bottom"):
+            self._root.style.alignSelf = "flex-end"
+        elif alignment in ("center", "centre"):
+            self._root.style.alignSelf = "center"
+        elif alignment == "fill":
+            self._root.style.alignSelf = "stretch"
+
+    def set_pixel(self, x, y, color):
+        self._cells[int(y)][int(x)].style.backgroundColor = _stringify(color)
+
+    def get_pixel(self, x, y):
+        return self._cells[int(y)][int(x)].style.backgroundColor
+
+    def set_all(self, color):
+        for row in self._cells:
+            for cell in row:
+                cell.style.backgroundColor = _stringify(color)
+
+    def clear(self):
+        self.set_all(self._default_color)
+
+
+def _cleanup_all():
+    for timer in list(_STATE["timers"]):
+        _clear_timer(timer)
+    _STATE["timers"].clear()
+    for widget in list(reversed(_STATE["widgets"])):
+        try:
+            widget.destroy()
+        except Exception:
+            pass
+    _STATE["widgets"].clear()
+    _STATE["root"] = None
+    _STATE["globals"] = None
+    canvas = js.document.getElementById("gui-canvas")
+    canvas.innerHTML = ""
+    canvas.setAttribute("data-empty", "true")
+    canvas.style.backgroundColor = ""
+
+
+def _run_user_code(source):
+    scope = {"__name__": "__main__"}
+    exec(source, scope, scope)
+    _STATE["globals"] = scope
+    return scope
+
+
+__all__ = [
+    "App",
+    "Box",
+    "ButtonGroup",
+    "CheckBox",
+    "Combo",
+    "ListBox",
+    "Picture",
+    "PushButton",
+    "Slider",
+    "Text",
+    "TextBox",
+    "TitleBox",
+    "Waffle",
+    "Window",
+]
+`;
+
+        async function ensurePyodide() {
+            if (pyodide) {
+                return pyodide;
+            }
+
+            pyodide = await loadPyodide({
+                stdout: (text) => appendConsole(text),
+                stderr: (text) => appendConsole(text, "error")
+            });
+            pyodide.FS.writeFile("guizero.py", fakeGuizeroCode);
+            return pyodide;
+        }
+
+        async function resetPythonView() {
+            if (!pyodide) {
+                resetViewOnly();
+                return;
+            }
+
+            try {
+                await pyodide.runPythonAsync(`
+from guizero import _cleanup_all
+_cleanup_all()
+`);
+            } catch (error) {
+                appendConsole(String(error), "error");
+            }
+            clearConsole();
+        }
+
+        async function main() {
+            try {
+                await ensurePyodide();
+                statusText.textContent = "Status: Ready";
+                runBtn.disabled = false;
+                resetBtn.disabled = false;
+            } catch (error) {
+                statusText.textContent = "Status: Failed to load Pyodide";
+                appendConsole(String(error), "error");
+            }
+        }
+
+        runBtn.addEventListener("click", async () => {
+            if (!pyodide || isRunning) {
+                return;
+            }
+
+            isRunning = true;
+            runBtn.disabled = true;
+            resetBtn.disabled = true;
+            statusText.textContent = "Status: Running program...";
+            clearConsole();
+
+            try {
+                pyodide.globals.set("USER_CODE_SOURCE", codeInput.value);
+                await pyodide.runPythonAsync(`
+from guizero import _cleanup_all, _run_user_code
+_cleanup_all()
+_run_user_code(USER_CODE_SOURCE)
+`);
+                statusText.textContent = "Status: Program finished";
+            } catch (error) {
+                appendConsole(String(error), "error");
+                statusText.textContent = "Status: Program finished with errors";
+            } finally {
+                pyodide.globals.delete("USER_CODE_SOURCE");
+                runBtn.disabled = false;
+                resetBtn.disabled = false;
+                isRunning = false;
+            }
+        });
+
+        resetBtn.addEventListener("click", async () => {
+            if (isRunning) {
+                return;
+            }
+            await resetPythonView();
+            statusText.textContent = "Status: View reset";
+        });
+
+        setCanvasEmpty(true);
+        main();
+    </script>
+</body>
+</html>
