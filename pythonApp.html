@@ -47,20 +47,21 @@ cowsay.cow('Modules are working in the browser!')
         async function main() {
             try {
                 pyodide = await loadPyodide({
-                    // Make sure this line is included!
+                    // RIGHT HERE: Tell Pyodide exactly where to fetch its system files from!
                     indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/",
-                    stdout: (text) => { outputDiv.innerHTML += text + "\n"; }
+                    stdout: (text) => { consoleOutput.innerHTML += text + "\n"; }
                 });
                 
-                await pyodide.loadPackage("micropip");
+                // Write our mock guizero module into the virtual Python environment
+                pyodide.FS.writeFile("guizero.py", fakeGuizeroCode);
+                
                 statusText.innerText = "Status: Ready!";
                 runBtn.disabled = false;
             } catch (err) {
                 statusText.innerText = "Status: Failed to load Pyodide.";
-                outputDiv.innerHTML = `<span class="error">${err}</span>`;
+                consoleOutput.innerHTML = `<span class="error">${err}</span>`;
             }
         }
-
         main();
 
         runBtn.addEventListener("click", async () => {
